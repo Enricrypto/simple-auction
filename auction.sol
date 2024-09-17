@@ -3,7 +3,7 @@ pragma solidity ^0.8.9;
 
 contract SimpleAuction {
     // auction parameters
-    address public beneficiary;
+    address public immutable beneficiary;
     uint public endTime; // As UNIX timestamp
 
     // State of the auction
