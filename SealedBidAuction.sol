@@ -15,7 +15,24 @@ contract SealedBidAuction {
     // Allowed withdrawals of previous bids
     mapping(address => uint256) public pendingReturns;
 
+    struct Bid {
+        bytes32 sealedBid;
+        uint deposit;
+    }
+
+    mapping(address => Bid[]) public bids;
+
     event AuctionEnded(address winner, uint256 amount);
+
+    modifier onlyBefore(uint time) {
+        require(block.timestamp < time, "too late");
+        _;
+    }
+
+    modifier onlyAfter(uint time) {
+        require(block.timestamp > time, "too early");
+        _;
+    }
 
     constructor(
         address _beneficiary,
@@ -25,6 +42,61 @@ contract SealedBidAuction {
         beneficiary = _beneficiary;
         biddingEnd = block.timestamp + _durationBiddingMinutes * 1 minutes;
         revealEnd = biddingEnd + _durationRevealMinutes * 1 minutes;
+    }
+
+    function bid(bytes32 _sealedBid) external payable onlyBefore(biddingEnd) {
+        Bid memory newBid = Bid({sealedBid: _sealedBid, deposit: msg.value});
+        bids[msg.sender].push(newBid);
+    }
+
+    function updateBid(
+        address _bidder,
+        uint _bidAmount
+    ) internal returns (bool success) {
+        if (_bidAmount <= highestBid) {
+            return false;
+        }
+        if (highestBidder != address(0)) {
+            // refund the previously highest bidder
+            pendingReturns[highestBidder] += highestBid;
+        }
+        highestBid = _bidAmount;
+        highestBidder = _bidder;
+        return true;
+    }
+
+    function reveal(
+        uint _bidAmount,
+        bool _isLegit,
+        string calldata _secret
+    ) external onlyAfter(biddingEnd) onlyBefore(revealEnd) {
+        uint refund;
+        Bid storage bidToCheck = bids[msg.sender][0]; // load the first bid iof the transaction sender
+        bytes32 hashedInput = generateSealedBid(_bidAmount, _isLegit, _secret);
+        if (bidToCheck.sealedBid == hashedInput) {
+            // Bid is succesfully revealed
+            refund = bidToCheck.deposit;
+            if (_isLegit && bidToCheck.deposit >= _bidAmount) {
+                // Bid is valid
+                bool success = updateBid(msg.sender, _bidAmount);
+                if (success) {
+                    // Bid is the new highest bid
+                    refund -= _bidAmount;
+                }
+            }
+            // Prevent re-claiming of the same deposit
+            bidToCheck.sealedBid = bytes32(0);
+        }
+        if (refund > 0) {
+            payable(msg.sender).transfer(refund);
+        }
+    }
+
+    function auctionEnd() external onlyAfter(revealEnd) {
+        require(!hasEnded, "Auction already ended");
+        emit AuctionEnded(highestBidder, highestBid);
+        hasEnded = true;
+        payable(beneficiary).transfer(highestBid);
     }
 
     function withdraw() external returns (uint256 amount) {

@@ -1,30 +1,27 @@
 // SPDX-License-Identifier: MIT
-
-// Warning: Do not use for actual funds on mainnet
-
 pragma solidity ^0.8.9;
 
 contract SimpleAuction {
     // auction parameters
-    address public immutable beneficiary;
-    uint256 public endTime; // As UNIX timestamp
+    address public beneficiary;
+    uint public endTime; // As UNIX timestamp
 
     // State of the auction
-    uint256 public highestBid;
+    uint public highestBid;
     address public highestBidder;
     bool public hasEnded;
 
-    constructor(address _beneficiary, uint256 _durationMinutes) {
+    constructor(address _beneficiary, uint _durationMinutes) {
         beneficiary = _beneficiary;
         endTime = block.timestamp + _durationMinutes * 1 minutes; //need to add the 1 for syntax purposes
     }
 
     // allows withdrawals of previous bids
-    mapping(address => uint256) public pendingReturns;
+    mapping(address => uint) public pendingReturns;
 
     // Events
-    event NewBid(address indexed bidder, uint256 amount);
-    event AuctionEnded(address winner, uint256 amount);
+    event NewBid(address indexed bidder, uint amount);
+    event AuctionEnded(address winner, uint amount);
 
     function bid() public payable {
         // payable modifier allows the contract to receive ether
